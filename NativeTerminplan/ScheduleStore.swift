@@ -7,12 +7,19 @@ final class ScheduleStore: ObservableObject {
 
     init() { load() }
 
+    var nextAppointment: ScheduleItem? {
+        let now = Date()
+        return days.flatMap(\.items)
+            .filter { $0.kind == .appointment && ($0.startDate() ?? .distantPast) >= now }
+            .min { ($0.startDate() ?? .distantFuture) < ($1.startDate() ?? .distantFuture) }
+    }
+
     func replace(with items: [ScheduleItem]) {
         let calendar = Calendar.current
         days = Dictionary(grouping: items, by: { calendar.startOfDay(for: $0.date) })
             .map { ScheduleDay(date: $0.key, items: $0.value.sorted { ($0.startMinutes ?? .max) < ($1.startMinutes ?? .max) }) }
             .sorted { $0.date < $1.date }
-        persist()
+        removeExpiredItemsAndPersist()
     }
 
     func clear() {
@@ -24,10 +31,29 @@ final class ScheduleStore: ObservableObject {
         guard let data = UserDefaults.standard.data(forKey: storageKey),
               let decoded = try? JSONDecoder().decode([ScheduleDay].self, from: data) else { return }
         days = decoded
+        removeExpiredItemsAndPersist()
     }
 
     private func persist() {
         guard let data = try? JSONEncoder().encode(days) else { return }
         UserDefaults.standard.set(data, forKey: storageKey)
     }
+
+    /// Appointments stay visible for 15 minutes after their end. Afterwards they are removed from
+    /// the on-device store; time-free information lines remain only for today and future days.
+    private func removeExpiredItemsAndPersist() {
+        let calendar = Calendar.current
+        let expiry = Date().addingTimeInterval(-15 * 60)
+        let today = calendar.startOfDay(for: Date())
+        days = days.compactMap { day in
+            let remaining = day.items.filter { item in
+                if item.kind == .appointment { return (item.endDate(calendar: calendar) ?? item.date) >= expiry }
+                return calendar.startOfDay(for: item.date) >= today
+            }
+            return remaining.isEmpty ? nil : ScheduleDay(date: day.date, items: remaining)
+        }
+        .sorted { $0.date < $1.date }
+        persist()
+    }
 }
+
