@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>AppGroupIdentifier</key>
+	<string>group.at.goinon.badvigaun.terminplan</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -14,26 +16,30 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>de</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>1.16</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>1.16</string>
 	<key>LSApplicationCategoryType</key>
-	<string></string>
+	<string>public.app-category.utilities</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Terminplan kann Termine in deinen Kalender eintragen.</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>Terminplan kann Termine in deinen Kalender eintragen.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Damit die Aufnahme deines Terminplans in der Fotos-App gesichert werden kann.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Die Kamera wird zum Einlesen des Wochenplans verwendet.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Terminplan kann einen Wochenplan aus deiner Fotomediathek einlesen.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -41,18 +47,18 @@
 	</dict>
 	<key>UILaunchScreen</key>
 	<dict/>
-    	<key>UISupportedInterfaceOrientations</key>
-    	<array>
-        	<string>UIInterfaceOrientationPortrait</string>
-        	<string>UIInterfaceOrientationLandscapeLeft</string>
-        	<string>UIInterfaceOrientationLandscapeRight</string>
-    	</array>
-    	<key>UISupportedInterfaceOrientations~ipad</key>
-    	<array>
-        	<string>UIInterfaceOrientationPortrait</string>
-        	<string>UIInterfaceOrientationPortraitUpsideDown</string>
-        	<string>UIInterfaceOrientationLandscapeLeft</string>
-        	<string>UIInterfaceOrientationLandscapeRight</string>
-    	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
 </dict>
 </plist>

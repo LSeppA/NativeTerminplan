@@ -14,6 +14,8 @@ struct ScheduleItem: Identifiable, Codable, Equatable {
     var title: String
     var location: String
     var note: String
+    var photoFileURL: String?
+    var photoAssetLocalIdentifier: String?
     var kind: ScheduleItemKind
 
     var timeText: String {

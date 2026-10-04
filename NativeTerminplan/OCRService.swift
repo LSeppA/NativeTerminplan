@@ -61,8 +61,8 @@ final class OCRService {
                 }
                 continuation.resume(returning: rectangle)
             }
-            request.minimumConfidence = 0.65
-            request.minimumSize = 0.45
+            request.minimumConfidence = 0.6
+            request.minimumSize = 0.25
             request.maximumObservations = 1
             DispatchQueue.global(qos: .userInitiated).async {
                 do { try VNImageRequestHandler(cgImage: cgImage, options: [:]).perform([request]) }
@@ -85,7 +85,7 @@ final class OCRService {
             request.recognitionLevel = .accurate
             request.recognitionLanguages = ["de-DE"]
             request.usesLanguageCorrection = true
-            request.minimumTextHeight = 0.009
+            request.minimumTextHeight = 0.012
             request.customWords = ["Mittagessen", "Wochenplan", "Therapiezentrum", "Überwasser", "Sensomotoriktraining", "Bewegungstraining", "Bad Vigaun"]
             DispatchQueue.global(qos: .userInitiated).async {
                 do { try VNImageRequestHandler(cgImage: cgImage, options: [:]).perform([request]) }
@@ -100,7 +100,7 @@ final class OCRService {
         let sorted = fragments.sorted { abs($0.centerYFromTop - $1.centerYFromTop) < 0.005 ? $0.rect.minX < $1.rect.minX : $0.centerYFromTop < $1.centerYFromTop }
         var rows: [OCRRow] = []
         for fragment in sorted {
-            if let index = rows.indices.last(where: { abs(rows[$0].y - fragment.centerYFromTop) < 0.014 }) { rows[index].fragments.append(fragment) }
+            if let index = rows.indices.last(where: { abs(rows[$0].y - fragment.centerYFromTop) < 0.016 }) { rows[index].fragments.append(fragment) }
             else { rows.append(OCRRow(fragments: [fragment], y: fragment.centerYFromTop)) }
         }
         return rows
@@ -110,28 +110,72 @@ final class OCRService {
         var currentDate: Date?
         var result: [ScheduleItem] = []
         var lastAppointmentIndex: Int?
+        var hasSeenFirstAppointmentForCurrentDate = false
         for row in rows {
-            if let date = date(in: row.allText) { currentDate = date; lastAppointmentIndex = nil; continue }
+            if let date = date(in: row.allText) { currentDate = date; lastAppointmentIndex = nil; hasSeenFirstAppointmentForCurrentDate = false; continue }
             guard let currentDate else { continue }
             let line = clean(row.allText)
             if let range = timeRange(in: line) {
-                let title = clean(removingTimePrefix(from: line))
-                result.append(ScheduleItem(date: currentDate, startMinutes: range.start, endMinutes: range.end, durationMinutes: nil, title: title.isEmpty ? "Termin" : title, location: "", note: "", kind: .appointment))
-                lastAppointmentIndex = result.indices.last
+                var title = clean(removingTimePrefix(from: line))
+                var note = ""
+                if containsRelevantKeyword(title){
+                    note = "bitte Leintuch zur Therapie mitnehmen!"
+                }
+                let (durationMinutes, durationMinutesCleanedTitle) = extractDurationAndClean(title)
+                title = durationMinutesCleanedTitle
+                title = removeFromFirstSlash(title)
+                let scheduledItem = ScheduleItem(date: currentDate, startMinutes: range.start, endMinutes: range.end, durationMinutes: durationMinutes, title: title.isEmpty ? "Termin" : title, location: "", note: note, kind: .appointment)
+                result.append(scheduledItem)
+                lastAppointmentIndex = result.indices.last; hasSeenFirstAppointmentForCurrentDate = true
             } else if let duration = duration(in: line), let index = lastAppointmentIndex {
                 result[index].durationMinutes = duration
                 if result[index].endMinutes == nil, let start = result[index].startMinutes { result[index].endMinutes = start + duration }
-            } else if let index = lastAppointmentIndex,
-                      (line.hasPrefix("(") || line.lowercased().hasPrefix("bitte") || result[index].title.hasSuffix("/")) {
-                if line.hasPrefix("(") { result[index].title = clean("\(result[index].title) \(line)") }
-                else { result[index].note = clean("\(result[index].note) \(line)") }
             } else if !line.isEmpty {
-                // Keep every time-free row, such as "Wochenplan unterschreiben".
+                // Ignore any time-free rows before the first appointment of the day.
+                guard hasSeenFirstAppointmentForCurrentDate else { continue }
+                // Keep every subsequent time-free row, such as "Wochenplan unterschreiben".
                 result.append(ScheduleItem(date: currentDate, startMinutes: nil, endMinutes: nil, durationMinutes: nil, title: line, location: "", note: "", kind: .information))
                 lastAppointmentIndex = nil
             }
         }
         return result
+    }
+    private func extractDurationAndClean(_ text: String) -> (duration: Int?, cleaned: String) {
+        let regex = /(\d{1,3})\s*Minuten?/
+        if let match = text.firstMatch(of: regex), let value = Int(match.1) {
+            // Remove the matched substring from the text
+            let cleaned = text.replacing(regex, with: "").replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
+            return (value, cleaned)
+        } else {
+            return (nil, text)
+        }
+    }
+    /// Returns true if the given text contains any of the relevant keywords,
+    /// otherwise returns false. Matching is case- and diacritic-insensitive.
+    private func containsRelevantKeyword(_ text: String) -> Bool {
+        let keywords = [
+            "ultraschall",
+            "gymnastik",
+            "funktionell",
+            "elektro",
+            "massage",
+            "eisenstadt",
+            "senso",
+            "bewegung",
+            "therapie"
+        ]
+        let normalized = text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "de_DE")).lowercased()
+        return keywords.contains { normalized.contains($0) }
+    }
+    private func removeFromFirstSlash(_ text: String) -> String {
+        // Only remove at a slash from the 29th character onward if the text is longer than 28 characters
+        if text.count > 28 {
+            let thresholdIndex = text.index(text.startIndex, offsetBy: 28)
+            if let slashIndex = text[thresholdIndex...].firstIndex(of: "/") {
+                return String(text[..<slashIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func removingTimePrefix(from text: String) -> String {
@@ -146,10 +190,25 @@ final class OCRService {
     private func timeRange(in text: String) -> (start: Int, end: Int?)? {
         guard let match = text.firstMatch(of: #/(?<sh>\d{1,2})[:.](?<sm>\d{2})(?:\s*[-–—]\s*(?<eh>\d{1,2})[:.](?<em>\d{2}))?/#), let sh = Int(match.output.sh), let sm = Int(match.output.sm) else { return nil }
         let end = match.output.eh.flatMap { hour in match.output.em.flatMap { minute in Int(hour).flatMap { h in Int(minute).map { h * 60 + $0 } } } }
+        
+/* Test Notifikation
+        let jetzt = Date()
+        let kalender = Calendar.current
+
+        let minuten = kalender.component(.hour, from: jetzt) * 60
+                    + kalender.component(.minute, from: jetzt)
+                    + 11
+        return (minuten, minuten + 60)
+ */
+
         return (sh * 60 + sm, end)
     }
     private func duration(in text: String) -> Int? {
-        guard let match = text.firstMatch(of: #/(\d{1,3})\s*Minuten?/#), let value = Int(match.output.1) else { return nil }; return value
+        guard let match = text.firstMatch(of: #/(\d{1,3})\s*Minuten?/#), let value = Int(match.output.1) else
+        {
+            return nil
+        } ;
+        return value
     }
     private func clean(_ text: String) -> String { text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines) }
 }

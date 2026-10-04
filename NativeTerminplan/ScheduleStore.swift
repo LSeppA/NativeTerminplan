@@ -43,12 +43,24 @@ final class ScheduleStore: ObservableObject {
     /// the on-device store; time-free information lines remain only for today and future days.
     private func removeExpiredItemsAndPersist() {
         let calendar = Calendar.current
-        let expiry = Date().addingTimeInterval(-15 * 60)
-        let today = calendar.startOfDay(for: Date())
+        let now = Date()
+        let today = calendar.startOfDay(for: now)
         days = days.compactMap { day in
             let remaining = day.items.filter { item in
-                if item.kind == .appointment { return (item.endDate(calendar: calendar) ?? item.date) >= expiry }
-                return calendar.startOfDay(for: item.date) >= today
+                switch item.kind {
+                case .appointment:
+                    let hasExplicitEnd = (item.endMinutes != nil) || (item.durationMinutes != nil)
+                    if hasExplicitEnd {
+                        // Keep if end is in the future or now
+                        return (item.endDate(calendar: calendar) ?? item.date) >= now
+                    } else {
+                        // No explicit end: keep for today; remove only if the day is in the past
+                        return calendar.startOfDay(for: item.date) >= today
+                    }
+                case .information:
+                    // Keep information lines only for today and future days
+                    return calendar.startOfDay(for: item.date) >= today
+                }
             }
             return remaining.isEmpty ? nil : ScheduleDay(date: day.date, items: remaining)
         }
