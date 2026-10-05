@@ -8,17 +8,11 @@ final class ScheduleStore: ObservableObject {
     init() { load() }
 
     var nextAppointment: ScheduleItem? {
-        let now = Date()
-        return days.flatMap(\.items)
-            .filter { $0.kind == .appointment && ($0.startDate() ?? .distantPast) >= now }
-            .min { ($0.startDate() ?? .distantFuture) < ($1.startDate() ?? .distantFuture) }
+        ScheduleLogic.currentOrNext(from: days.flatMap(\.items))
     }
 
     func replace(with items: [ScheduleItem]) {
-        let calendar = Calendar.current
-        days = Dictionary(grouping: items, by: { calendar.startOfDay(for: $0.date) })
-            .map { ScheduleDay(date: $0.key, items: $0.value.sorted { ($0.startMinutes ?? .max) < ($1.startMinutes ?? .max) }) }
-            .sorted { $0.date < $1.date }
+        days = ScheduleLogic.groupedDays(from: items)
         removeExpiredItemsAndPersist()
     }
 
@@ -39,8 +33,8 @@ final class ScheduleStore: ObservableObject {
         UserDefaults.standard.set(data, forKey: storageKey)
     }
 
-    /// Appointments stay visible for 15 minutes after their end. Afterwards they are removed from
-    /// the on-device store; time-free information lines remain only for today and future days.
+    /// Expired appointments are removed after their end; time-free information lines remain only
+    /// for today and future days.
     private func removeExpiredItemsAndPersist() {
         let calendar = Calendar.current
         let now = Date()
@@ -51,18 +45,15 @@ final class ScheduleStore: ObservableObject {
                 case .appointment:
                     let hasExplicitEnd = (item.endMinutes != nil) || (item.durationMinutes != nil)
                     if hasExplicitEnd {
-                        // Keep if end is in the future or now
-                        return (item.endDate(calendar: calendar) ?? item.date) >= now
+                        return !ScheduleLogic.isPastAppointment(item, now: now, calendar: calendar)
                     } else {
-                        // No explicit end: keep for today; remove only if the day is in the past
                         return calendar.startOfDay(for: item.date) >= today
                     }
                 case .information:
-                    // Keep information lines only for today and future days
                     return calendar.startOfDay(for: item.date) >= today
                 }
             }
-            return remaining.isEmpty ? nil : ScheduleDay(date: day.date, items: remaining)
+            return remaining.isEmpty ? nil : ScheduleDay(date: day.date, items: ScheduleLogic.sorted(remaining, calendar: calendar))
         }
         .sorted { $0.date < $1.date }
         persist()

@@ -22,10 +22,8 @@ enum NextAppointmentSharedStore {
             return nil
         }
     }
-    
+
     private static let upcomingKey = "upcomingAppointments"
-    
-    // File-based persistence (robust across processes)
     private static let snapshotsFileName = "next_appointment.json"
     private static let listFileName = "upcoming_appointments.json"
 
@@ -49,11 +47,18 @@ enum NextAppointmentSharedStore {
             }
             return
         }
-        let snapshot = NextAppointmentSnapshot(date: item.date, startMinutes: item.startMinutes, endMinutes: item.endMinutes, durationMinutes: item.durationMinutes, title: item.title, location: item.location)
+
+        let snapshot = NextAppointmentSnapshot(
+            date: item.date,
+            startMinutes: item.startMinutes,
+            endMinutes: item.endMinutes,
+            durationMinutes: item.durationMinutes,
+            title: item.title,
+            location: item.location
+        )
         if let data = try? JSONEncoder().encode(snapshot) {
             if let defaults = defaults {
                 defaults.set(data, forKey: SharedConstants.nextAppointmentKey)
-                saveList(from: [item])
             } else {
                 #if DEBUG
                 print("[NextAppointmentSharedStore] Defaults unavailable; cannot save snapshot.")
@@ -72,12 +77,14 @@ enum NextAppointmentSharedStore {
     }
 
     static func load() -> NextAppointmentSnapshot? {
-        // Prefer file-based snapshot for robustness
-        if let url = snapshotsFileURL, let data = try? Data(contentsOf: url), let snap = try? JSONDecoder().decode(NextAppointmentSnapshot.self, from: data) {
+        if let url = snapshotsFileURL,
+           let data = try? Data(contentsOf: url),
+           let snap = try? JSONDecoder().decode(NextAppointmentSnapshot.self, from: data) {
             return snap
         }
-        // Fallback to UserDefaults
-        guard let defaults = defaults, let data = defaults.data(forKey: SharedConstants.nextAppointmentKey) else {
+
+        guard let defaults = defaults,
+              let data = defaults.data(forKey: SharedConstants.nextAppointmentKey) else {
             #if DEBUG
             print("[NextAppointmentSharedStore] No snapshot data available in file or defaults.")
             #endif
@@ -85,7 +92,7 @@ enum NextAppointmentSharedStore {
         }
         return try? JSONDecoder().decode(NextAppointmentSnapshot.self, from: data)
     }
-    
+
     static func saveList(from items: [ScheduleItem]) {
         guard let defaults = defaults else {
             #if DEBUG
@@ -93,24 +100,21 @@ enum NextAppointmentSharedStore {
             #endif
             return
         }
-        // Store only appointments, in chronological order, from now onward (including current)
+
         let now = Date()
-        let calendar = Calendar.current
-        let appts = items.filter { $0.kind == .appointment }
-            .sorted { (a, b) in
-                let aStart = calendar.date(bySettingHour: (a.startMinutes ?? 0) / 60, minute: (a.startMinutes ?? 0) % 60, second: 0, of: a.date) ?? a.date
-                let bStart = calendar.date(bySettingHour: (b.startMinutes ?? 0) / 60, minute: (b.startMinutes ?? 0) % 60, second: 0, of: b.date) ?? b.date
-                return aStart < bStart
+        let snapshots = sortedAppointments(from: items)
+            .filter { !isPastAppointment($0, now: now) }
+            .map { item in
+                NextAppointmentSnapshot(
+                    date: item.date,
+                    startMinutes: item.startMinutes,
+                    endMinutes: item.endMinutes,
+                    durationMinutes: item.durationMinutes,
+                    title: item.title,
+                    location: item.location
+                )
             }
-            .filter { appt in
-                let start = calendar.date(bySettingHour: (appt.startMinutes ?? 0) / 60, minute: (appt.startMinutes ?? 0) % 60, second: 0, of: appt.date) ?? appt.date
-                let end = appt.endMinutes.flatMap { em in calendar.date(bySettingHour: em / 60, minute: em % 60, second: 0, of: appt.date) } ?? start
-                let grace: TimeInterval = 5 * 60
-                return end >= now || now < start.addingTimeInterval(grace)
-            }
-        let snapshots = appts.map { item in
-            NextAppointmentSnapshot(date: item.date, startMinutes: item.startMinutes, endMinutes: item.endMinutes, durationMinutes: item.durationMinutes, title: item.title, location: item.location)
-        }
+
         if let data = try? JSONEncoder().encode(snapshots) {
             defaults.set(data, forKey: upcomingKey)
             if let url = listFileURL {
@@ -124,19 +128,36 @@ enum NextAppointmentSharedStore {
             }
         }
     }
-    
+
     static func loadList() -> [NextAppointmentSnapshot] {
-        // Prefer file-based list for robustness
-        if let url = listFileURL, let data = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode([NextAppointmentSnapshot].self, from: data) {
+        if let url = listFileURL,
+           let data = try? Data(contentsOf: url),
+           let decoded = try? JSONDecoder().decode([NextAppointmentSnapshot].self, from: data) {
             return decoded
         }
-        // Fallback to UserDefaults
-        guard let defaults = defaults, let data = defaults.data(forKey: upcomingKey) else {
+
+        guard let defaults = defaults,
+              let data = defaults.data(forKey: upcomingKey) else {
             #if DEBUG
             print("[NextAppointmentSharedStore] No list data available in file or defaults.")
             #endif
             return []
         }
         return (try? JSONDecoder().decode([NextAppointmentSnapshot].self, from: data)) ?? []
+    }
+
+    private static func sortedAppointments(from items: [ScheduleItem], calendar: Calendar = .current) -> [ScheduleItem] {
+        items.filter { $0.kind == .appointment }
+            .sorted { first, second in
+                let firstStart = first.startDate(calendar: calendar) ?? first.date
+                let secondStart = second.startDate(calendar: calendar) ?? second.date
+                return firstStart < secondStart
+            }
+    }
+
+    private static func isPastAppointment(_ item: ScheduleItem, now: Date, calendar: Calendar = .current) -> Bool {
+        let start = item.startDate(calendar: calendar) ?? item.date
+        let end = item.endDate(calendar: calendar) ?? start
+        return end < now
     }
 }

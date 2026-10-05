@@ -1,21 +1,22 @@
 import CoreImage
+import CoreImage.CIFilterBuiltins
 import Foundation
 import UIKit
 @preconcurrency import Vision
 
-private struct OCRFragment {
+struct OCRFragment {
     let text: String
     let rect: CGRect
     var centerYFromTop: CGFloat { 1 - rect.midY }
 }
 
-private struct OCRRow {
+struct OCRRow {
     var fragments: [OCRFragment]
     var y: CGFloat
     var allText: String { fragments.sorted { $0.rect.minX < $1.rect.minX }.map(\.text).joined(separator: " ") }
 }
 
-/// Reads the schedule as visual text lines. Date lines create the day boundaries.
+/// Reads A4 printed schedule sheets as visual text lines. Date lines create the day boundaries.
 final class OCRService {
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -28,9 +29,8 @@ final class OCRService {
     func recognizeSchedule(in source: UIImage) async throws -> [ScheduleItem] {
         let image = source.normalized()
         let corrected = await perspectiveCorrect(image)
-
-        // No fixed columns: one OCR line is one logical schedule line. A date line starts a new day.
-        return parse(rows: makeRows(from: try await recognizeFragments(in: corrected)))
+        let prepared = prepareForTextRecognition(corrected)
+        return parse(rows: makeRows(from: try await recognizeFragments(in: prepared)))
     }
 
     // MARK: - Document preparation
@@ -49,7 +49,31 @@ final class OCRService {
         filter.setValue(CIVector(cgPoint: point(rectangle.bottomRight)), forKey: "inputBottomRight")
         guard let output = filter.outputImage,
               let outputCG = ciContext.createCGImage(output, from: output.extent) else { return image }
-        return UIImage(cgImage: outputCG)
+        return UIImage(cgImage: outputCG, scale: image.scale, orientation: .up)
+    }
+
+    private func prepareForTextRecognition(_ image: UIImage) -> UIImage {
+        guard let cgImage = image.cgImage else { return image }
+        var output = CIImage(cgImage: cgImage)
+
+        let colorControls = CIFilter.colorControls()
+        colorControls.inputImage = output
+        colorControls.saturation = 0
+        colorControls.contrast = 1.18
+        colorControls.brightness = 0.03
+        if let adjusted = colorControls.outputImage {
+            output = adjusted
+        }
+
+        let sharpen = CIFilter.sharpenLuminance()
+        sharpen.inputImage = output
+        sharpen.sharpness = 0.45
+        if let sharpened = sharpen.outputImage {
+            output = sharpened
+        }
+
+        guard let preparedCG = ciContext.createCGImage(output, from: output.extent) else { return image }
+        return UIImage(cgImage: preparedCG, scale: image.scale, orientation: .up)
     }
 
     private func documentRectangle(in cgImage: CGImage) async throws -> VNRectangleObservation {
@@ -61,9 +85,10 @@ final class OCRService {
                 }
                 continuation.resume(returning: rectangle)
             }
-            request.minimumConfidence = 0.6
-            request.minimumSize = 0.25
-            request.maximumObservations = 1
+            request.minimumConfidence = 0.55
+            request.minimumSize = 0.35
+            request.maximumObservations = 3
+            request.quadratureTolerance = 30
             DispatchQueue.global(qos: .userInitiated).async {
                 do { try VNImageRequestHandler(cgImage: cgImage, options: [:]).perform([request]) }
                 catch { continuation.resume(throwing: error) }
@@ -82,93 +107,101 @@ final class OCRService {
                 }
                 continuation.resume(returning: fragments)
             }
-            request.recognitionLevel = .accurate
-            request.recognitionLanguages = ["de-DE"]
-            request.usesLanguageCorrection = true
-            request.minimumTextHeight = 0.012
-            request.customWords = ["Mittagessen", "Wochenplan", "Therapiezentrum", "Überwasser", "Sensomotoriktraining", "Bewegungstraining", "Bad Vigaun"]
+            configureTextRequest(request)
             DispatchQueue.global(qos: .userInitiated).async {
-                do { try VNImageRequestHandler(cgImage: cgImage, options: [:]).perform([request]) }
+                do { try VNImageRequestHandler(cgImage: cgImage, orientation: .up, options: [:]).perform([request]) }
                 catch { continuation.resume(throwing: error) }
             }
         }
     }
 
+    private func configureTextRequest(_ request: VNRecognizeTextRequest) {
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = ["de-AT", "de-DE"]
+        request.usesLanguageCorrection = true
+        request.minimumTextHeight = 0.009
+        if #available(iOS 16.0, *) {
+            request.automaticallyDetectsLanguage = false
+        }
+        request.customWords = [
+            "Bad Vigaun", "Therapiezentrum", "Überwasser", "Wochenplan", "Mittagessen",
+            "Leintuch", "unterschreiben", "Sensomotoriktraining", "Bewegungstraining",
+            "Ultraschall", "Elektrotherapie", "Massage", "Gymnastik", "Funktionell",
+            "Eisenstadt", "Therapie", "Training"
+        ]
+    }
+
     // MARK: - Schedule parsing
 
-    private func makeRows(from fragments: [OCRFragment]) -> [OCRRow] {
-        let sorted = fragments.sorted { abs($0.centerYFromTop - $1.centerYFromTop) < 0.005 ? $0.rect.minX < $1.rect.minX : $0.centerYFromTop < $1.centerYFromTop }
+    func makeRows(from fragments: [OCRFragment]) -> [OCRRow] {
+        let sorted = fragments.sorted {
+            abs($0.centerYFromTop - $1.centerYFromTop) < 0.005 ? $0.rect.minX < $1.rect.minX : $0.centerYFromTop < $1.centerYFromTop
+        }
         var rows: [OCRRow] = []
         for fragment in sorted {
-            if let index = rows.indices.last(where: { abs(rows[$0].y - fragment.centerYFromTop) < 0.016 }) { rows[index].fragments.append(fragment) }
-            else { rows.append(OCRRow(fragments: [fragment], y: fragment.centerYFromTop)) }
+            if let index = rows.indices.last(where: { abs(rows[$0].y - fragment.centerYFromTop) < 0.016 }) {
+                rows[index].fragments.append(fragment)
+            } else {
+                rows.append(OCRRow(fragments: [fragment], y: fragment.centerYFromTop))
+            }
         }
         return rows
     }
 
-    private func parse(rows: [OCRRow]) -> [ScheduleItem] {
+    func parse(rows: [OCRRow]) -> [ScheduleItem] {
         var currentDate: Date?
         var result: [ScheduleItem] = []
         var lastAppointmentIndex: Int?
         var hasSeenFirstAppointmentForCurrentDate = false
         for row in rows {
-            if let date = date(in: row.allText) { currentDate = date; lastAppointmentIndex = nil; hasSeenFirstAppointmentForCurrentDate = false; continue }
+            if let date = date(in: row.allText) {
+                currentDate = date
+                lastAppointmentIndex = nil
+                hasSeenFirstAppointmentForCurrentDate = false
+                continue
+            }
             guard let currentDate else { continue }
             let line = clean(row.allText)
             if let range = timeRange(in: line) {
                 var title = clean(removingTimePrefix(from: line))
                 var note = ""
-                if containsRelevantKeyword(title){
+                if containsRelevantKeyword(title) {
                     note = "bitte Leintuch zur Therapie mitnehmen!"
                 }
                 let (durationMinutes, durationMinutesCleanedTitle) = extractDurationAndClean(title)
-                title = durationMinutesCleanedTitle
-                title = removeFromFirstSlash(title)
+                title = removeFromFirstSlash(durationMinutesCleanedTitle)
                 let scheduledItem = ScheduleItem(date: currentDate, startMinutes: range.start, endMinutes: range.end, durationMinutes: durationMinutes, title: title.isEmpty ? "Termin" : title, location: "", note: note, kind: .appointment)
                 result.append(scheduledItem)
-                lastAppointmentIndex = result.indices.last; hasSeenFirstAppointmentForCurrentDate = true
+                lastAppointmentIndex = result.indices.last
+                hasSeenFirstAppointmentForCurrentDate = true
             } else if let duration = duration(in: line), let index = lastAppointmentIndex {
                 result[index].durationMinutes = duration
                 if result[index].endMinutes == nil, let start = result[index].startMinutes { result[index].endMinutes = start + duration }
             } else if !line.isEmpty {
-                // Ignore any time-free rows before the first appointment of the day.
                 guard hasSeenFirstAppointmentForCurrentDate else { continue }
-                // Keep every subsequent time-free row, such as "Wochenplan unterschreiben".
                 result.append(ScheduleItem(date: currentDate, startMinutes: nil, endMinutes: nil, durationMinutes: nil, title: line, location: "", note: "", kind: .information))
                 lastAppointmentIndex = nil
             }
         }
         return result
     }
+
     private func extractDurationAndClean(_ text: String) -> (duration: Int?, cleaned: String) {
-        let regex = /(\d{1,3})\s*Minuten?/
+        let regex = /(\d{1,3})\s*Min(?:\.|uten?)?/
         if let match = text.firstMatch(of: regex), let value = Int(match.1) {
-            // Remove the matched substring from the text
             let cleaned = text.replacing(regex, with: "").replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines)
             return (value, cleaned)
-        } else {
-            return (nil, text)
         }
+        return (nil, text)
     }
-    /// Returns true if the given text contains any of the relevant keywords,
-    /// otherwise returns false. Matching is case- and diacritic-insensitive.
+
     private func containsRelevantKeyword(_ text: String) -> Bool {
-        let keywords = [
-            "ultraschall",
-            "gymnastik",
-            "funktionell",
-            "elektro",
-            "massage",
-            "eisenstadt",
-            "senso",
-            "bewegung",
-            "therapie"
-        ]
+        let keywords = ["ultraschall", "gymnastik", "funktionell", "elektro", "massage", "eisenstadt", "senso", "bewegung", "therapie"]
         let normalized = text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "de_DE")).lowercased()
         return keywords.contains { normalized.contains($0) }
     }
+
     private func removeFromFirstSlash(_ text: String) -> String {
-        // Only remove at a slash from the 29th character onward if the text is longer than 28 characters
         if text.count > 28 {
             let thresholdIndex = text.index(text.startIndex, offsetBy: 28)
             if let slashIndex = text[thresholdIndex...].firstIndex(of: "/") {
@@ -187,30 +220,26 @@ final class OCRService {
         guard let range = text.range(of: #"\d{1,2}\.\d{1,2}\.\d{4}"#, options: .regularExpression) else { return nil }
         return dateFormatter.date(from: String(text[range]))
     }
+
     private func timeRange(in text: String) -> (start: Int, end: Int?)? {
-        guard let match = text.firstMatch(of: #/(?<sh>\d{1,2})[:.](?<sm>\d{2})(?:\s*[-–—]\s*(?<eh>\d{1,2})[:.](?<em>\d{2}))?/#), let sh = Int(match.output.sh), let sm = Int(match.output.sm) else { return nil }
+        guard let match = text.firstMatch(of: #/(?<sh>\d{1,2})[:.](?<sm>\d{2})(?:\s*[-–—]\s*(?<eh>\d{1,2})[:.](?<em>\d{2}))?/#),
+              let sh = Int(match.output.sh),
+              let sm = Int(match.output.sm) else { return nil }
         let end = match.output.eh.flatMap { hour in match.output.em.flatMap { minute in Int(hour).flatMap { h in Int(minute).map { h * 60 + $0 } } } }
-        
-/* Test Notifikation
-        let jetzt = Date()
-        let kalender = Calendar.current
-
-        let minuten = kalender.component(.hour, from: jetzt) * 60
-                    + kalender.component(.minute, from: jetzt)
-                    + 11
-        return (minuten, minuten + 60)
- */
-
         return (sh * 60 + sm, end)
     }
+
     private func duration(in text: String) -> Int? {
-        guard let match = text.firstMatch(of: #/(\d{1,3})\s*Minuten?/#), let value = Int(match.output.1) else
-        {
-            return nil
-        } ;
+        guard let match = text.firstMatch(of: #/(\d{1,3})\s*Min(?:\.|uten?)?/#), let value = Int(match.output.1) else { return nil }
         return value
     }
-    private func clean(_ text: String) -> String { text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func clean(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: #"\([A-Za-z]\d{4}\)"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 private extension UIImage {
@@ -230,4 +259,3 @@ enum OCRFailure: LocalizedError {
         }
     }
 }
-
