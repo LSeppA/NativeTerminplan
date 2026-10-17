@@ -5,6 +5,7 @@ import os
 @available(iOS 16.1, *)
 struct AppointmentActivityAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
+        var status: String
         var title: String
         var startDate: Date
         var location: String?
@@ -40,16 +41,19 @@ enum LiveActivityManager {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         logger.info("LiveActivity: activities enabled")
 
-        // Determine what to show: prefer current, otherwise next
-        let display = current ?? next
-        guard let item = display, let start = item.startDate() else {
+        guard let display = displayItem(current: current, next: next),
+              let start = display.item.startDate() else {
             logger.info("LiveActivity: no item to display; ending all activities")
-            // No item to display; end all activities
             await endAll()
             return
         }
 
-        let state = AppointmentActivityAttributes.ContentState(title: item.title, startDate: start, location: item.location.isEmpty ? nil : item.location)
+        let state = AppointmentActivityAttributes.ContentState(
+            status: display.status,
+            title: display.item.title,
+            startDate: start,
+            location: display.item.location.isEmpty ? nil : display.item.location
+        )
 
         // If an activity exists, update it; otherwise, start a new one
         if let activity = Activity<AppointmentActivityAttributes>.activities.first {
@@ -89,5 +93,21 @@ enum LiveActivityManager {
                 await endPre162(activity)
             }
         }
+    }
+
+    private static func displayItem(current: ScheduleItem?, next: ScheduleItem?, now: Date = Date()) -> (status: String, item: ScheduleItem)? {
+        guard let current else {
+            return next.map { ("Demnächst", $0) }
+        }
+
+        guard let end = current.endDate() else {
+            return ("Jetzt", current)
+        }
+
+        if let next, now >= end.addingTimeInterval(-5 * 60) {
+            return ("Demnächst", next)
+        }
+
+        return ("Jetzt", current)
     }
 }

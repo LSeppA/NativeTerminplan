@@ -6,21 +6,30 @@ import Testing
 struct ScheduleLogicTests {
     private let calendar = Calendar(identifier: .gregorian)
 
-    @Test func currentOrNextReturnsCurrentWithinFirstFiveMinutes() throws {
-        let day = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 4)))
-        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 4, hour: 9, minute: 3)))
-        let item = appointment(day: day, start: 9 * 60, end: 10 * 60)
-
-        #expect(ScheduleLogic.currentOrNext(from: [item], now: now, calendar: calendar)?.id == item.id)
-    }
-
-    @Test func currentOrNextSkipsCurrentAfterGracePeriod() throws {
+    @Test func currentOrNextReturnsCurrentUntilFiveMinutesBeforeEnd() throws {
         let day = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 4)))
         let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 4, hour: 9, minute: 10)))
         let current = appointment(day: day, start: 9 * 60, end: 10 * 60, title: "Current")
         let next = appointment(day: day, start: 11 * 60, end: 12 * 60, title: "Next")
 
+        #expect(ScheduleLogic.currentOrNext(from: [current, next], now: now, calendar: calendar)?.id == current.id)
+    }
+
+    @Test func currentOrNextSwitchesToNextFiveMinutesBeforeEnd() throws {
+        let day = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 4)))
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 4, hour: 9, minute: 55)))
+        let current = appointment(day: day, start: 9 * 60, end: 10 * 60, title: "Current")
+        let next = appointment(day: day, start: 11 * 60, end: 12 * 60, title: "Next")
+
         #expect(ScheduleLogic.currentOrNext(from: [current, next], now: now, calendar: calendar)?.id == next.id)
+    }
+
+    @Test func currentOrNextReturnsNilAfterLastAppointmentEnds() throws {
+        let day = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 4)))
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 4, hour: 10, minute: 1)))
+        let current = appointment(day: day, start: 9 * 60, end: 10 * 60, title: "Current")
+
+        #expect(ScheduleLogic.currentOrNext(from: [current], now: now, calendar: calendar) == nil)
     }
 
     @Test func prepareImportReplacesOnlyAffectedDays() throws {

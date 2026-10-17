@@ -94,13 +94,6 @@ enum NextAppointmentSharedStore {
     }
 
     static func saveList(from items: [ScheduleItem]) {
-        guard let defaults = defaults else {
-            #if DEBUG
-            print("[NextAppointmentSharedStore] Defaults unavailable; cannot save list.")
-            #endif
-            return
-        }
-
         let now = Date()
         let snapshots = sortedAppointments(from: items)
             .filter { !isPastAppointment($0, now: now) }
@@ -116,7 +109,13 @@ enum NextAppointmentSharedStore {
             }
 
         if let data = try? JSONEncoder().encode(snapshots) {
-            defaults.set(data, forKey: upcomingKey)
+            if let defaults {
+                defaults.set(data, forKey: upcomingKey)
+            } else {
+                #if DEBUG
+                print("[NextAppointmentSharedStore] Defaults unavailable; saving list file only.")
+                #endif
+            }
             if let url = listFileURL {
                 do {
                     try data.write(to: url, options: [.atomic])

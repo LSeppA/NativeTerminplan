@@ -241,7 +241,7 @@ struct ContentView: View {
         List {
             if let next = ScheduleLogic.currentOrNext(from: store.days.flatMap { $0.items }) {
                 let isCurrent = ScheduleLogic.isCurrent(next)
-                Section(isCurrent ? "Jetzt" : "Als Nächstes") {
+                Section(isCurrent ? "Jetzt" : "Demnächst") {
                     NextAppointmentCard(item: next, onShowPhoto: { id in showPhoto(with: id) })
                 }
             }

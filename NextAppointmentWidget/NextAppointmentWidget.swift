@@ -131,7 +131,7 @@ struct NextAppointmentWidgetEntryView: View {
         case .accessoryCircular:
             ZStack {
                 VStack(spacing: 1) {
-                    Text(entry.title == "Jetzt" ? "J" : "N")
+                    Text(entry.title == "Jetzt" ? "J" : "D")
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(.secondary)
                     if let t = entry.startTimeText {
@@ -175,6 +175,6 @@ struct NextAppointmentWidget: Widget {
 #Preview(as: .systemSmall) {
     NextAppointmentWidget()
 } timeline: {
-    AppointmentEntry(date: .now, title: "Als Nächstes", subtitle: "12:30 • Therapie • Raum 2", startTimeText: "12:30", endTimeText: nil, concurrentCount: nil)
+    AppointmentEntry(date: .now, title: "Demnächst", subtitle: "12:30 • Therapie", startTimeText: "12:30", endTimeText: nil, concurrentCount: nil)
 }
 #endif

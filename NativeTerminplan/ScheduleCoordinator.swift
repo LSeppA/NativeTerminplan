@@ -43,6 +43,9 @@ final class ScheduleCoordinator: ObservableObject {
         NextAppointmentSharedStore.saveList(from: [])
         WidgetCenter.shared.reloadAllTimelines()
         cancelScheduledRefreshes()
+        if #available(iOS 16.1, *) {
+            Task { await LiveActivityManager.endAll() }
+        }
         logger.info("Cleared all appointments and notifications; reloaded widgets")
     }
 
@@ -159,20 +162,15 @@ final class ScheduleCoordinator: ObservableObject {
         }
 
         logger.info("[Refresh] Current appointment found: \(current.title, privacy: .public)")
-        guard let start = current.startDate() else { return }
-        let end = current.endDate() ?? start
-        let threshold = start.addingTimeInterval(5 * 60)
-        let nextFire = min(threshold, end)
+        let next = nextAppointment(after: current, in: items)
+        guard let end = current.endDate() ?? current.startDate() else { return }
 
-        if now < nextFire {
-            scheduleOneShotRefresh(after: nextFire.timeIntervalSince(now), store: store, label: "Timed")
+        if now < end.addingTimeInterval(-5 * 60) {
+            let switchDate = max(Date(), end.addingTimeInterval(-5 * 60))
+            scheduleOneShotRefresh(after: switchDate.timeIntervalSince(now), store: store, label: "Upcoming-before-end")
         } else {
-            let postEndFire = end.addingTimeInterval(10)
-            if postEndFire > now {
-                scheduleOneShotRefresh(after: postEndFire.timeIntervalSince(now), store: store, label: "Post-end")
-            } else {
-                scheduleOneShotRefresh(after: 0, store: store, label: "Immediate")
-            }
+            let clearDate = end.addingTimeInterval(1)
+            scheduleOneShotRefresh(after: max(0, clearDate.timeIntervalSince(now)), store: store, label: next == nil ? "Last-end" : "Current-end")
         }
     }
 
@@ -207,6 +205,16 @@ final class ScheduleCoordinator: ObservableObject {
         NextAppointmentSharedStore.saveList(from: items)
         NextAppointmentSharedStore.save(from: ScheduleLogic.currentOrNext(from: items))
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    private func nextAppointment(after current: ScheduleItem, in items: [ScheduleItem]) -> ScheduleItem? {
+        guard let currentStart = current.startDate() else { return nil }
+        return ScheduleLogic.sorted(items)
+            .filter { $0.kind == .appointment }
+            .first { item in
+                guard let start = item.startDate() else { return false }
+                return start > currentStart
+            }
     }
 
     private func pruneUnreferencedImages(for store: ScheduleStore) {

@@ -10,7 +10,7 @@ struct ScheduleImportResult {
 
 enum ScheduleLogic {
     private static let footerMarkers = ["sehr verehrte", "sehr geehrte"]
-    private static let currentGrace: TimeInterval = 5 * 60
+    private static let upcomingSwitchBeforeEnd: TimeInterval = 5 * 60
 
     static func sorted(_ items: [ScheduleItem], calendar: Calendar = .current) -> [ScheduleItem] {
         items.sorted { first, second in
@@ -50,14 +50,18 @@ enum ScheduleLogic {
 
     static func currentOrNext(from items: [ScheduleItem], now: Date = Date(), calendar: Calendar = .current) -> ScheduleItem? {
         let appointments = sorted(items.filter { $0.kind == .appointment }, calendar: calendar)
-        for appointment in appointments {
+        for (index, appointment) in appointments.enumerated() {
             let start = appointment.startDate(calendar: calendar) ?? appointment.date
             let end = appointmentEnd(for: appointment, calendar: calendar) ?? start
-            if now >= start && now <= end {
-                if now.timeIntervalSince(start) <= currentGrace { return appointment }
-                continue
+            if now < start { return appointment }
+            if now >= start && now < end {
+                let next = nextAppointment(after: index, in: appointments, calendar: calendar)
+                let switchDate = max(start, end.addingTimeInterval(-upcomingSwitchBeforeEnd))
+                if let next, now >= switchDate {
+                    return next
+                }
+                return appointment
             }
-            if start > now { return appointment }
         }
         return nil
     }
@@ -126,5 +130,15 @@ enum ScheduleLogic {
         let replacedAppointments = appointmentsOnAffectedDays(replacedBy: importedItems, in: existingItems, calendar: calendar)
         let mergedItems = mergeImportedItems(importedItems, into: existingItems, calendar: calendar)
         return ScheduleImportResult(trimmedItems: trimmedItems, importedItems: importedItems, mergedItems: mergedItems, replacedAppointments: replacedAppointments, skippedPastAppointments: skippedPastAppointments)
+    }
+
+    private static func nextAppointment(after index: Int, in appointments: [ScheduleItem], calendar: Calendar) -> ScheduleItem? {
+        guard index + 1 < appointments.count else { return nil }
+        let current = appointments[index]
+        guard let currentStart = current.startDate(calendar: calendar) else { return nil }
+        return appointments[(index + 1)...].first { item in
+            guard let start = item.startDate(calendar: calendar) else { return false }
+            return start > currentStart
+        }
     }
 }
