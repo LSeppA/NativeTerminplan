@@ -73,9 +73,8 @@ struct ContentView: View {
                         Button {
                             showInfo = true
                         } label: {
-                            Image(systemName: "info.circle.fill")
-                                .imageScale(.medium)
-                                .foregroundStyle(.blue)
+                            Text("ℹ️")
+                                .font(.system(size: 18))
                                 .accessibilityLabel("Informationen anzeigen")
                         }
                     }
@@ -176,7 +175,7 @@ struct ContentView: View {
                         Button {
                             showInfo = true
                         } label: {
-                            Text("Zur Freischaltung zum Einlesen bitte zuerst Bedingungen akzeptieren!")
+                            Text("Zur Freischaltung zum Einlesen bitte zuerst Bedingungen akzeptieren! ℹ️")
                                 .font(.footnote)
                                 .foregroundStyle(.primary)
                                 .padding(.horizontal, 12)
