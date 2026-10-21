@@ -74,6 +74,19 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		2E33B38730896820000615A4 /* ScreenRecording_Notification.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = ScreenRecording_Notification.mp4; sourceTree = "<group>"; };
+		2E33B38830896820000615A4 /* ScreenRecording_Usage.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = ScreenRecording_Usage.mp4; sourceTree = "<group>"; };
+		2E33B38930896820000615A4 /* Usage.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = Usage.mp4; sourceTree = "<group>"; };
+		2E33B38B30896820000615A4 /* datenschutz.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = datenschutz.html; sourceTree = "<group>"; };
+		2E33B38C30896820000615A4 /* datenschutz_android.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = datenschutz_android.html; sourceTree = "<group>"; };
+		2E33B38D30896820000615A4 /* index_mit_demo.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index_mit_demo.html; sourceTree = "<group>"; };
+		2E33B38E30896820000615A4 /* index.html.disabled.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html.disabled.html; sourceTree = "<group>"; };
+		2E33B38F30896820000615A4 /* support.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = support.html; sourceTree = "<group>"; };
+		2E33B39030896820000615A4 /* support_android.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = support_android.html; sourceTree = "<group>"; };
+		2E33B3933089685E000615A4 /* datenschutz.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = datenschutz.html; sourceTree = "<group>"; };
+		2E33B3943089685E000615A4 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
+		2E33B3953089685E000615A4 /* support.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = support.html; sourceTree = "<group>"; };
+		2E33B3973089687C000615A4 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = SOURCE_ROOT; };
 		9B1DB2CB3072B6D800DE1BE3 /* ScheduleLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleLogic.swift; sourceTree = "<group>"; };
 		9B1DB2CD3072C71900DE1BE3 /* PhotoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoStore.swift; sourceTree = "<group>"; };
 		9B1DB2CF3072C74D00DE1BE3 /* ScheduleCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleCoordinator.swift; sourceTree = "<group>"; };
@@ -143,6 +156,49 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		2E33B38A30896820000615A4 /* demos */ = {
+			isa = PBXGroup;
+			children = (
+				2E33B38730896820000615A4 /* ScreenRecording_Notification.mp4 */,
+				2E33B38830896820000615A4 /* ScreenRecording_Usage.mp4 */,
+				2E33B38930896820000615A4 /* Usage.mp4 */,
+			);
+			path = demos;
+			sourceTree = "<group>";
+		};
+		2E33B39130896820000615A4 /* MeinTerminplan */ = {
+			isa = PBXGroup;
+			children = (
+				2E33B38A30896820000615A4 /* demos */,
+				2E33B38B30896820000615A4 /* datenschutz.html */,
+				2E33B38C30896820000615A4 /* datenschutz_android.html */,
+				2E33B38D30896820000615A4 /* index_mit_demo.html */,
+				2E33B38E30896820000615A4 /* index.html.disabled.html */,
+				2E33B38F30896820000615A4 /* support.html */,
+				2E33B39030896820000615A4 /* support_android.html */,
+			);
+			path = MeinTerminplan;
+			sourceTree = "<group>";
+		};
+		2E33B39230896820000615A4 /* www */ = {
+			isa = PBXGroup;
+			children = (
+				2E33B39130896820000615A4 /* MeinTerminplan */,
+			);
+			path = www;
+			sourceTree = "<group>";
+		};
+		2E33B3963089685E000615A4 /* Support und Datenschutz */ = {
+			isa = PBXGroup;
+			children = (
+				2E33B3973089687C000615A4 /* README.md */,
+				2E33B3933089685E000615A4 /* datenschutz.html */,
+				2E33B3943089685E000615A4 /* index.html */,
+				2E33B3953089685E000615A4 /* support.html */,
+			);
+			path = "Support und Datenschutz";
+			sourceTree = SOURCE_ROOT;
+		};
 		9B5B18233067311D002A1EC3 /* InfoAssets */ = {
 			isa = PBXGroup;
 			children = (
@@ -169,6 +225,8 @@
 				9B1DB2D83073F8D600DE1BE3 /* NativeTerminplanTests */,
 				9BB501A43058328400E05191 /* Frameworks */,
 				A00000000000000000000022 /* Products */,
+				2E33B39230896820000615A4 /* www */,
+				2E33B3963089685E000615A4 /* Support und Datenschutz */,
 			);
 			sourceTree = "<group>";
 		};
